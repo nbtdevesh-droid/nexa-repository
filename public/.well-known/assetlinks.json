@@ -1,0 +1,12 @@
+[
+    {
+        "relation": ["delegate_permission/common.handle_all_urls"],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "com.nexa.app.nexa",
+            "sha256_cert_fingerprints": [
+                "F0:D3:2D:6C:28:52:EC:FF:45:A2:9D:D8:63:84:51:C3:81:82:F7:5A:22:03:64:2F:5A:8B:B3:8B:E1:7E:D8:87"
+            ]
+        }
+    }
+]
