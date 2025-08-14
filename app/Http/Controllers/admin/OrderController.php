@@ -252,10 +252,10 @@ class OrderController extends Controller
             $message->subject('Your Refund Has Been Processed Successfully');
         });
     
-        // Mail::send('admin.email.AdminPaymentRefundMail', ['order' => $order, 'user' => $fullname], function ($message) use ($user) {
-        //     $message->to('info@nexamarket.app');
-        //     $message->subject('Refund Processed Successfully');
-        // });
+        Mail::send('admin.email.AdminPaymentRefundMail', ['order' => $order, 'user' => $fullname], function ($message) use ($user) {
+            $message->to('info@nexamarket.app');
+            $message->subject('Refund Processed Successfully');
+        });
         return back()->withSuccess('Refund successfully processed and email sent to customer.');
     }
 
@@ -304,64 +304,51 @@ class OrderController extends Controller
 
     public function export_order()
     {
-        $orders = Order::get();
-
+        $orders = Order::with('user')->get();
         $headers = [
-            
-            'Order Number',
-            'Name',
-            'Address',
-            'Country',
-            'Province',
-            'City',
-            'Company',
-            'Zip Code',
-            'E-mail',
-            'Phone Number',
-            'Product Amount',
-            'Shipping Charge',
-            'Total',
+            'Order Number', 'Name', 'Address', 'Country', 'Province', 'City', 'Company',
+            'Zip Code', 'E-mail', 'Phone Number', 'Product Amount', 'Shipping Charge', 'Total', 'Order Status',
         ];
-
+    
         $response = new StreamedResponse(function () use ($orders, $headers) {
             $handle = fopen('php://output', 'w');
-
             fputcsv($handle, $headers);
-           
+    
             foreach ($orders as $order) {
-               
-                $customer_data= User::where('id',$order->user_id)->first();
-
-                    if (!empty($order->shiping_address_id)) {
-                        $data = json_decode($order->shiping_address_id, true);
-                    }
-               
-                    $row = [
-                        $order->order_id,
-                        $customer_data->first_name.' '. $customer_data->last_name,
-                        $data['address'] ?? null,
-                        $data['country'] ?? null,
-                        $data['state'] ?? null,
-                        $data['city'] ?? null,
-                        null,
-                        $data['zip_code'] ?? null,
-
-                        $customer_data->email ?? null,
-                        $customer_data->phone ?? null,
-                        // 'Product Amount',
-                        '$ '. $order->net_amount - $order->shipping_charges ?? 0,
-                        is_null($order->shipping_charges)?null: '$ ' . $order->shipping_charges,
-                        '$ ' . $order->net_amount ?? null,
-                    ];
-                    fputcsv($handle, $row);
+                $customer_data = $order->user;
+    
+                $customer_name = $customer_data ? ($customer_data->first_name . ' ' . $customer_data->last_name) : '';
+                $customer_email = $customer_data->email ?? '';
+                $customer_phone = $customer_data->phone ?? '';
+    
+                $data = $order->shiping_address_id ? json_decode($order->shiping_address_id, true) : [];
+    
+                $row = [
+                    $order->order_id,
+                    $customer_name,
+                    $data['address'] ?? null,
+                    $data['country'] ?? null,
+                    $data['state'] ?? null,
+                    $data['city'] ?? null,
+                    null,
+                    $data['zip_code'] ?? null,
+                    $customer_email,
+                    $customer_phone,
+                    '₦ ' . (($order->net_amount ?? 0) - ($order->shipping_charges ?? 0)),
+                    is_null($order->shipping_charges) ? null : '₦ ' . $order->shipping_charges,
+                    '₦ ' . ($order->net_amount ?? 0),
+                    $order->order_status,
+                ];
+    
+                fputcsv($handle, $row);
             }
-
+    
             fclose($handle);
         });
-
-        $response->headers->set('Content-Type', 'text/csv');
+    
+        $response->headers->set('Content-Type', 'text/csv; charset=UTF-8');
         $response->headers->set('Content-Disposition', 'attachment; filename="orders.csv"');
-
+    
         return $response;
     }
 }

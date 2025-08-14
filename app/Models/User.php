@@ -11,12 +11,14 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Drivers\Gd\Driver;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class User extends Model
 {
-    use HasFactory, HasApiTokens, Notifiable;
+    use HasFactory, HasApiTokens, Notifiable, SoftDeletes;
     protected $table = 'user';
-
+    protected $dates = ['deleted_at'];
+    
     function InsertId($data, $user = null){
         $isNewUser = true;
 

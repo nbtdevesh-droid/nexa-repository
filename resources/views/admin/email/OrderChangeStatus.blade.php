@@ -135,7 +135,7 @@
                                 </td>
                                 <td style="padding: 8px;">{{ $product['product_name'] }}</td>
                                 <td style="padding: 8px;">{{ $product['purchase_quantity'] }}</td>
-                                <td style="padding: 8px;">${{ $product['purchase_price'] }}</td>
+                                <td style="padding: 8px;">₦{{ $product['purchase_price'] }}</td>
                             </tr>
                         @endforeach
                     </tbody>

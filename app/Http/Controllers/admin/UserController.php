@@ -26,27 +26,52 @@ class UserController extends Controller
     public function index(Request $request)
     {
         if ($request->ajax()) {
-            $users_list = $this->user->latest('id');
+            $users_list = $this->user->withTrashed()->latest('id');
 
             if ($request->has('keyword') && $request->keyword != "") {
                 $keyword = $request->keyword;
                 $users_list = $users_list->where(function ($query) use ($keyword) {
-                    $query->where(DB::raw("CONCAT(first_name, ' ', last_name)"), 'like', '%' . $keyword . '%')
-                        ->orWhere('email', 'like', '%' . $keyword . '%')
-                        ->orWhere('phone', 'like', '%' . $keyword . '%');
+                    $query->where(DB::raw("CONCAT(first_name, ' ', last_name)"), 'like', '%' . $keyword . '%')->orWhere('email', 'like', '%' . $keyword . '%')->orWhere('phone', 'like', '%' . $keyword . '%');
                 });
             }
-
+            if ($request->has('filter') && $request->filter != "") {
+                $filter = $request->filter;
+            
+                if ($filter == 'trashed') {
+                    $users_list = $users_list->onlyTrashed();
+                } elseif ($filter == 'all') {
+                    $users_list = $users_list->withTrashed();
+                }
+                elseif ($filter == 'active') {
+                    $users_list = $users_list->whereNull('deleted_at'); ;
+                }
+            }
+            
             $users_list = $users_list->paginate(10);
+
             return response()->json([
-                'data' => $users_list->items(),
+                'data' => $users_list->map(function ($user) {
+                    return [
+                        'id' => $user->id,
+                        'first_name' => $user->first_name,
+                        'last_name' => $user->last_name,
+                        'email' => $user->email,
+                        'image' => $user->image,
+                        'phone' => $user->phone,
+                        'status' => $user->status,
+                        'deleted_by' => $user->delete_by ? $user->delete_by : '',
+                        'deleted_at' => $user->deleted_at,
+                        'country_code' => $user->country_code,
+                        'country' => $user->country,
+                    ];
+                }),
                 'current_page' => $users_list->currentPage(),
                 'per_page' => $users_list->perPage(),
-                'links' => (string) $users_list->links()->render()  // Render pagination links as HTML
+                'links' => (string) $users_list->links()->render()
             ]);
         }
 
-        $users_list = $this->user->orderBy('id', 'desc')->paginate(10);; // Get all users without pagination
+        $users_list = $this->user->withTrashed()->orderBy('id', 'desc')->paginate(10);
         return view('admin.user.index', compact('users_list'));
     }
 
@@ -109,7 +134,7 @@ class UserController extends Controller
      */
     public function show(string $id)
     {
-        $user = $this->user->where('id', $id)->with('shipping_address')->get();
+        $user = $this->user->withTrashed()->where('id', $id)->with('shipping_address')->get();
         if (!$user) {
             return response()->json(['message' => 'User not found'], 404);
         }
@@ -121,7 +146,7 @@ class UserController extends Controller
      */
     public function edit(string $id)
     {
-        $data['user'] = $this->user->find($id);
+        $data['user'] = $this->user->withTrashed()->find($id);
         $data['countries'] = Country::orderBy('name', 'asc')->get();
         return view('admin.user.edit_user', $data);
     }
@@ -147,15 +172,37 @@ class UserController extends Controller
     public function destroy(string $id)
     {
         $data = $this->user->find($id);
+
         if ($data) {
-            if ($data->image != "") {
-                File::delete(public_path('/admin-assets/assets/img/profile_img/user/' . $data->image));
-            }
+            $data->delete_by = 'admin';
+            // Delete all Sanctum access tokens of the user
+            $data->tokens()->delete();
+
+            $data->save();
+
+            // Delete associated device token(s)
+            DB::table('device_tokens')->where('user_id', $data->id)->delete();
+
             $data->delete();
+            
             return redirect()->route('user.index')->withSuccess('Record Delete Successfully');
         } else {
             return redirect()->route('user.index')->with('error', 'Record Delete Failed');
         }
+    }
+
+    public function restore($id)
+    {
+        $user = User::withTrashed()->findOrFail($id);
+
+        if ($user->trashed()) {
+            $user->restore();
+            $user->delete_by = null;
+            $user->save();
+            return redirect()->route('user.index')->withSuccess('User restored successfully.');
+        }
+
+        return redirect()->route('user.index')->with('info', 'User is not deleted.');
     }
     
     public function export_user()

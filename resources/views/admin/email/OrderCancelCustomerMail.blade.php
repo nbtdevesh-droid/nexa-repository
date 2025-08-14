@@ -76,7 +76,7 @@
                 <li><strong>Order ID:</strong> {{ $order->order_id }}</li>
                 <li><strong>Order Date:</strong> {{ $order->created_at->format('M d, Y') }}</li>
                 <li><strong>Cancellation Date:</strong> {{ now()->format('M d, Y') }}</li>
-                <li><strong>Total Amount:</strong> ${{ $order->net_amount }}</li>
+                <li><strong>Total Amount:</strong> ₦{{ $order->net_amount }}</li>
             </ul>
 
             @if ($order->payment_mode != 'cod')

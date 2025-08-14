@@ -58,6 +58,7 @@ Route::group(['middleware' => 'auth'], function () {
         Route::resource('user', UserController::class);
         Route::post('unique-phone-number-user', [UserController::class, 'uniquePhoneNumberUser']);
         Route::post('unique-email-user', [UserController::class, 'uniqueEmailUser']);
+        Route::patch('/users/{id}/restore', [UserController::class, 'restore'])->name('user.restore');
 
         /************************* Staff ************************/
         Route::resource('staff', StaffController::class);

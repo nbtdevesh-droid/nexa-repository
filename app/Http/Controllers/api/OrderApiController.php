@@ -513,10 +513,10 @@ class OrderApiController extends Controller
         // $bank_Details = BankDetails::where('user_id', $user->id)->first();
 
         // Send order cancellation email admin
-        // Mail::send('admin.email.order-cancellation-success', ['order' => $get_orders, 'user' => $fullname], function ($message) use ($get_orders) {
-        //     $message->to('info@nexamarket.app');
-        //     $message->subject('Order Cancellation Request');
-        // });
+        Mail::send('admin.email.order-cancellation-success', ['order' => $get_orders, 'user' => $fullname], function ($message) use ($get_orders) {
+            $message->to('info@nexamarket.app');
+            $message->subject('Order Cancellation Request');
+        });
 
         // Send order cancellation email customer
         Mail::send('admin.email.OrderCancelCustomerMail', ['order' => $get_orders, 'user' => $user], function ($message) use ($user) {
@@ -794,15 +794,14 @@ class OrderApiController extends Controller
         /************ Customer Mail **************/
         Mail::send('admin.email.OrderConfirm', ['order' => $order, 'user' => $user], function ($message) use ($user) {
             $message->to($user->email);
-            // $message->to('jangidveena582@gmail.com');
             $message->subject('Order Placed Successful');
         });
 
         /*********** Admin Mail *****************/
-        // Mail::send('admin.email.NewOrderRecive', ['order' => $order, 'user' => $user], function ($message) use ($user) {
-        //     $message->to('info@nexamarket.app');
-        //     $message->subject('New Order Received');
-        // });
+        Mail::send('admin.email.NewOrderRecive', ['order' => $order, 'user' => $user], function ($message) use ($user) {
+            $message->to('info@nexamarket.app');
+            $message->subject('New Order Received');
+        });
 
         if ($order->staff_member_id) {
             $staff_ids = json_decode($order->staff_member_id, true);

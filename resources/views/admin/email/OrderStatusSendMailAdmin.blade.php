@@ -93,7 +93,7 @@
                 @else
                     <li><strong>Delivered On:</strong> @if($order->shiping_date) {{ $order->shiping_date->format('d F, Y') }} @else Not available @endif</li>
                 @endif
-                <li><strong>Total Amount:</strong> ${{ $order->net_amount }}</li>
+                <li><strong>Total Amount:</strong> ₦{{ $order->net_amount }}</li>
             </ul>
 
             <div class="inventory-info">

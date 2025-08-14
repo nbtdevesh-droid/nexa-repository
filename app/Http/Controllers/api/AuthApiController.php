@@ -28,8 +28,20 @@ class AuthApiController extends Controller
             return response()->json(['status' => 'failed', 'message' => $validator->errors()->first()]);
         }
 
-        $input = $request->all();
+        $user = User::withTrashed()->where('email', $request->credentials)->first();
 
+        if (!$user) {
+            return response()->json(['status' => 'failed', 'message' => 'These credentials do not match our records.'], 401);
+        }
+    
+        if ($user->trashed()) {
+            if ($user->delete_by === 'admin') {
+                return response()->json(['status' => 'failed', 'message' => 'Your account has been deactivated by an administrator. Please contact support for assistance.'], 403);
+            } else {
+                return response()->json(['status' => 'failed', 'message' => 'Your account is deactivated. Please register to reactivate your account.'], 403);
+            }
+        }
+    
         if (filter_var($request->credentials, FILTER_VALIDATE_EMAIL)) {
             $user = User::where('email', $request->credentials)->first();
 
@@ -80,60 +92,89 @@ class AuthApiController extends Controller
         }
 
         // Check if the user exists with the provided phone number and country code
-        $user = User::where('phone', $request->credentials)->where('country_code', $request->country_code)->first();
+        $user = User::withTrashed()->where('phone', $request->credentials)->where('country_code', $request->country_code)->first();
 
-        if (!$user) {
-            return response()->json(['status' => 'success', 'message' => 'Customer does not exist']);
+        if ($user) {
+            if ($user->trashed()) {
+                if ($user->delete_by === 'admin') {
+                    return response()->json(['status' => 'failed', 'message' => 'Your account has been deactivated by an administrator. Please contact support for assistance.'], 403);
+                } else {
+                    return response()->json(['status' => 'failed', 'message' => 'Your account is deactivated. Please register to reactivate your account.'], 403);
+                }
+            }
+    
+            return response()->json(['status' => 'failed', 'message' => 'The credentials have already been taken.']);
         }
-        return response()->json(['status' => 'failed', 'message' => 'The credentials have already been taken.']);
+    
+        return response()->json(['status' => 'success', 'message' => 'Customer does not exist']);
     }
 
     public function customerRegisterOrLogin(Request $request)
     {
-        $userCount = User::Where('phone', $request->credentials)->where('country_code', $request->country_code)->first();
+        $user = User::withTrashed()->where('phone', $request->credentials)->where('country_code', $request->country_code)->first();
 
-        if ($userCount) {
-            if ($userCount->status == '1') {
-                $profile = User::select('id', 'first_name','last_name', 'email', 'country', 'country_code', 'phone', 'image', 'current_steps')->where('id', $userCount->id)->first();
-                $profile->image = !empty($profile->image) ? asset('admin-assets/assets/img/profile_img/user/' . $profile->image) : asset('admin-assets/assets/img/profile_img/user/common.png');
-
-                // DB::table('device_tokens')->updateOrInsert(
-                //     ['user_id' => $userCount->id, 'device_token' => $request->fcm_token]
-                // );
-                // $token = $userCount->createToken($request->credentials)->plainTextToken;
-
-                $tokenData = $userCount->createToken($request->credentials);
-                $token = $tokenData->plainTextToken;
-                $tokenId = $tokenData->accessToken->id;
-
-                DB::table('device_tokens')->updateOrInsert(
-                    ['user_id' => $userCount->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
-                );
-
-                if (is_numeric($request->credentials)) {
-                    return Response::json(array('status' => 'success', 'message' => 'Login Successfully', 'token' => $token, 'token_id' => $userCount->id, 'userdata' => $profile));
-                }
-            }else{
-                return Response::json(array('status' => 'success', 'message' => 'Customer is blocked', 'token' => null, 'token_id' => null, 'userdata' => null));
+        // If user exists and is soft-deleted → Reactivate
+        if ($user && $user->trashed()) {
+            if ($user->delete_by === 'admin') {
+                return response()->json(['status' => 'failed', 'message' => 'Your account has been deactivated by an administrator. Please contact support.'], 403);
             }
-        } else {
-            $User = new User();
-            $User->phone = $request->credentials;
-            $User->country_code = $request->country_code;
-            $User->status = 1;
-            $User->current_steps = 'step_1';
-            $User->save();
+            $user->restore();
+            $user->status = 1;
+            $user->current_steps = 'step_2';
+            $user->delete_by = null;
+            $user->save();
+
+            $tokenData = $user->createToken($request->credentials);
+            $token = $tokenData->plainTextToken;
+            $tokenId = $tokenData->accessToken->id;
 
             DB::table('device_tokens')->updateOrInsert(
-                ['user_id' => $User->id, 'device_token' => $request->fcm_token]
+                ['user_id' => $user->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
             );
 
-            $token = $User->createToken($request->credentials)->plainTextToken;
+            $profile = $this->formatUserProfile($user);
 
-            if (is_numeric($request->credentials)) {
-                return Response::json(array('status' => 'success', 'message' => 'Sign up Successfully', 'token' => $token, 'token_id' => $User->id, 'userdata' => $User));
-            }
+            return response()->json(['status' => 'success', 'message' => 'Account reactivated successfully!', 'token' => $token, 'token_id' => $user->id, 'userdata' => $profile]);
         }
+
+         // If user exists and is active
+        if ($user) {
+            if ($user->status != '1') {
+                return response()->json(['status' => 'failed', 'message' => 'Customer is blocked', 'token' => null, 'token_id' => null, 'userdata' => null]);
+            }
+
+            $tokenData = $user->createToken($request->credentials);
+            $token = $tokenData->plainTextToken;
+            $tokenId = $tokenData->accessToken->id;
+
+            DB::table('device_tokens')->updateOrInsert(
+                ['user_id' => $user->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
+            );
+
+            $profile = $this->formatUserProfile($user);
+
+            return response()->json(['status' => 'success', 'message' => 'Login Successfully', 'token' => $token, 'token_id' => $user->id, 'userdata' => $profile]);
+        }
+
+        // If no user found → Create new account
+        $newUser = new User();
+        $newUser->phone = $request->credentials;
+        $newUser->country_code = $request->country_code;
+        $newUser->status = 1;
+        $newUser->current_steps = 'step_1';
+        $newUser->save();
+
+        $tokenData = $newUser->createToken($request->credentials);
+        $token = $tokenData->plainTextToken;
+        $tokenId = $tokenData->accessToken->id;
+
+        DB::table('device_tokens')->updateOrInsert(
+            ['user_id' => $newUser->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
+        );
+
+        $profile = $this->formatUserProfile($newUser);
+
+        return response()->json(['status' => 'success', 'message' => 'Sign up Successfully', 'token' => $token, 'token_id' => $newUser->id, 'userdata' => $profile]);
     }
 
     public function recover_password(Request $request){
@@ -325,136 +366,257 @@ class AuthApiController extends Controller
         return Response::json(['status' => 'failed', 'message' => 'Logout failed.']);
     }
     
-    public function socialite_login(Request $request) {
-        // $validator = Validator::make($request->all(), [
-        //     'socailite_type' => 'required',
-        //     'socailite_id' => 'required',
-        //     'first_name' => 'required',
-        //     'email' => 'required|email',
-        //     'fcm_token' => 'required',
-        // ]);
+    // public function socialite_login(Request $request) {
+    //     // $validator = Validator::make($request->all(), [
+    //     //     'socailite_type' => 'required',
+    //     //     'socailite_id' => 'required',
+    //     //     'first_name' => 'required',
+    //     //     'email' => 'required|email',
+    //     //     'fcm_token' => 'required',
+    //     // ]);
     
-        // if ($validator->fails()) {
-        //     return response()->json(['status' => 'failed', 'message' => $validator->errors()->first()]);
-        // }
+    //     // if ($validator->fails()) {
+    //     //     return response()->json(['status' => 'failed', 'message' => $validator->errors()->first()]);
+    //     // }
     
-        if ($request->socailite_type === 'apple') {
-            $data = User::where('email', '=', $request->email)->orWhere('apple_id', '=', $request->socailite_id)->first();
-        } else {
-            $data = User::where('email', $request->email)->first();
-        }
+    //     // if ($request->socailite_type === 'apple') {
+    //     //     if($request->email){
+    //     //         $data = User::Where('apple_id', '=', $request->socailite_id)->orWhere('email', $request->email)->first();
+    //     //     }else{
+    //     //         $data = User::Where('apple_id', '=', $request->socailite_id)->first();
+    //     //     }
+    //     // } else {
+    //     //     $data = User::where('email', $request->email)->first();
+    //     // }
+    //     $query = User::withTrashed();  // Include soft-deleted users in the query
+    //     if ($request->socailite_type === 'apple') {
+    //         $request->email ? $query->where('email', $request->email)->orWhere('apple_id', $request->socailite_id) : $query->where('apple_id', $request->socailite_id);
+    //     } else {
+    //         $query->where('email', $request->email);
+    //     }
+    
+    //     $data = $query->first();
 
-        if ($data) {
-            if ($data->status == 1) {
-                switch ($request->socailite_type) {
-                    case 'apple':
-                        if ($data->apple_id === $request->socailite_id) {
-                            // DB::table('device_tokens')->updateOrInsert(['user_id' => $data->id, 'device_token' => $request->fcm_token]);
-                            $tokenData = $data->createToken($data->email);
-                            $token = $tokenData->plainTextToken;
-                            $tokenId = $tokenData->accessToken->id;
-                
-                            DB::table('device_tokens')->updateOrInsert(
-                                ['user_id' => $data->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
-                            );
+    //     if ($data) {
+    //         if ($data->status == 1) {
+    //             switch ($request->socailite_type) {
+    //                 case 'apple':
+    //                     if ($data->apple_id === $request->socailite_id) {
 
-                            return response()->json(['status' => 'success', 'message' => 'Sign In With apple Successfully', 'token' => $token, 'userdata' => $data]);
-                        } else {
-                            $data->apple_id = $request->socailite_id;
-                        }
-                        break;
-                    case 'google':
-                        if ($data->google_id === $request->socailite_id) {
-                            $tokenData = $data->createToken($request->email);
-                            $token = $tokenData->plainTextToken;
-                            $tokenId = $tokenData->accessToken->id;
+    //                         // DB::table('device_tokens')->updateOrInsert(['user_id' => $data->id, 'device_token' => $request->fcm_token]);
+    //                         $tokenData = $data->createToken($data->email);
+    //                         $token = $tokenData->plainTextToken;
+    //                         $tokenId = $tokenData->accessToken->id;
                 
-                            DB::table('device_tokens')->updateOrInsert(
-                                ['user_id' => $data->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
-                            );
-                            return response()->json(['status' => 'success', 'message' => 'Sign In with Google Successfully', 'token' => $token, 'userdata' => $data]);
-                        } else {
-                            $data->google_id = $request->socailite_id;
-                        }
-                        break;
+    //                         DB::table('device_tokens')->updateOrInsert(
+    //                             ['user_id' => $data->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
+    //                         );
+
+    //                         return response()->json(['status' => 'success', 'message' => 'Sign In With apple Successfully', 'token' => $token, 'userdata' => $data]);
+    //                     } else {
+    //                         $data->apple_id = $request->socailite_id;
+    //                     }
+    //                     break;
+    //                 case 'google':
+    //                     if ($data->google_id === $request->socailite_id) {
+    //                         $tokenData = $data->createToken($request->email);
+    //                         $token = $tokenData->plainTextToken;
+    //                         $tokenId = $tokenData->accessToken->id;
+                
+    //                         DB::table('device_tokens')->updateOrInsert(
+    //                             ['user_id' => $data->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
+    //                         );
+    //                         return response()->json(['status' => 'success', 'message' => 'Sign In with Google Successfully', 'token' => $token, 'userdata' => $data]);
+    //                     } else {
+    //                         $data->google_id = $request->socailite_id;
+    //                     }
+    //                     break;
     
-                    case 'facebook':
-                        if ($data->facebook_id === $request->socailite_id) {
-                            $tokenData = $data->createToken($request->email);
-                            $token = $tokenData->plainTextToken;
-                            $tokenId = $tokenData->accessToken->id;
+    //                 case 'facebook':
+    //                     if ($data->facebook_id === $request->socailite_id) {
+    //                         $tokenData = $data->createToken($request->email);
+    //                         $token = $tokenData->plainTextToken;
+    //                         $tokenId = $tokenData->accessToken->id;
                 
-                            DB::table('device_tokens')->updateOrInsert(
-                                ['user_id' => $data->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
-                            );
-                            return response()->json(['status' => 'success', 'message' => 'Sign In with Facebook Successfully', 'token' => $token, 'userdata' => $data]);
-                        } else {
-                            $data->facebook_id = $request->socailite_id;
-                        }
-                        break;
-                }
-                if ($data->save()) {
-                    // DB::table('device_tokens')->updateOrInsert(['user_id' => $data->id, 'device_token' => $request->fcm_token]);
-                    $tokenData = $data->createToken($request->email);
-                    $token = $tokenData->plainTextToken;
-                    $tokenId = $tokenData->accessToken->id;
+    //                         DB::table('device_tokens')->updateOrInsert(
+    //                             ['user_id' => $data->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
+    //                         );
+    //                         return response()->json(['status' => 'success', 'message' => 'Sign In with Facebook Successfully', 'token' => $token, 'userdata' => $data]);
+    //                     } else {
+    //                         $data->facebook_id = $request->socailite_id;
+    //                     }
+    //                     break;
+    //             }
+    //             if ($data->save()) {
+    //                 $tokenData = $data->createToken($request->email);
+    //                 $token = $tokenData->plainTextToken;
+    //                 $tokenId = $tokenData->accessToken->id;
         
-                    DB::table('device_tokens')->updateOrInsert(
-                        ['user_id' => $data->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
-                    );
+    //                 DB::table('device_tokens')->updateOrInsert(
+    //                     ['user_id' => $data->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
+    //                 );
 
-                    return response()->json(['status' => 'success', 'message' => 'Socialite ID updated and Sign up successful.', 'token' => $token, 'userdata' => $data]);
-                } else {
-                    return response()->json(['status' => 'failed', 'message' => 'Failed to update socialite ID.', 'token' => null, 'userdata' => null]);
-                }
-            } else {
-                return response()->json(['status' => 'failed', 'message' => 'User account is inactive', 'token' => null, 'userdata' => null]);
-            }
+    //                 return response()->json(['status' => 'success', 'message' => 'Socialite ID updated and Sign up successful.', 'token' => $token, 'userdata' => $data]);
+    //             } else {
+    //                 return response()->json(['status' => 'failed', 'message' => 'Failed to update socialite ID.', 'token' => null, 'userdata' => null]);
+    //             }
+    //         } else {
+    //             return response()->json(['status' => 'failed', 'message' => 'User account is inactive', 'token' => null, 'userdata' => null]);
+    //         }
+    //     } else {
+    //         $user = User::where('email', $request->email)->first();
+
+    //         if($user)
+    //         {
+
+    //         }else{
+    //             $fullName = $request->first_name;
+    //             // Split the name by spaces
+    //             $nameParts = explode(' ', $fullName);
+    
+    //             // The first part will be the first name
+    //             $firstName = array_shift($nameParts); // First word as first name
+    
+    //             // The remaining parts will be the last name
+    //             $lastName = implode(' ', $nameParts); // Join remaining words as last name
+    
+    //             $adduser = new User;
+    //             switch ($request->socailite_type) {
+    //                 case 'google':
+    //                     $adduser->google_id = $request->socailite_id;
+    //                     break;
+    //                 case 'facebook':
+    //                     $adduser->facebook_id = $request->socailite_id;
+    //                     break;
+    //                 case 'apple':
+    //                     $adduser->apple_id = $request->socailite_id;
+    //                     break;
+    //             }
+    //             $adduser->first_name = $firstName;
+    //             $adduser->last_name = $lastName; 
+    //             $adduser->email = $request->email;
+    //             $adduser->password = Hash::make(Str::before($request->email, '@'));
+    //             $adduser->status = "1";
+    //             $adduser->current_steps = 'step_2';
+    //             $adduser->save();
+        
+    //             // DB::table('device_tokens')->updateOrInsert(
+    //             //     ['user_id' => $adduser->id, 'device_token' => $request->fcm_token]
+    //             // );
+    
+    //             $tokenData = $adduser->createToken($request->email);
+    //             $token = $tokenData->plainTextToken;
+    //             $tokenId = $tokenData->accessToken->id;
+    
+    //             DB::table('device_tokens')->updateOrInsert(
+    //                 ['user_id' => $adduser->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
+    //             );
+        
+    //             return response()->json(['status' => 'success', 'message' => 'Sign up with Socialite Successfully', 'token' => $token, 'userdata' => $adduser]);
+    //         }
+    //     }
+    // }
+
+    public function socialite_login(Request $request)
+    {
+        $socialiteType = $request->socailite_type;
+        $socialiteId   = $request->socailite_id;
+    
+        // Check for user based on socialite ID or email
+        $query = User::withTrashed();  // Include soft-deleted users in the query
+        if ($socialiteType === 'apple') {
+            // $query->where('email', $request->email);
+            $request->email ? $query->where('email', $request->email)->orWhere('apple_id', $socialiteId) : $query->where('apple_id', $socialiteId);
         } else {
-            $fullName = $request->first_name;
-            // Split the name by spaces
-            $nameParts = explode(' ', $fullName);
-
-            // The first part will be the first name
-            $firstName = array_shift($nameParts); // First word as first name
-
-            // The remaining parts will be the last name
-            $lastName = implode(' ', $nameParts); // Join remaining words as last name
-
-            $adduser = new User;
-            switch ($request->socailite_type) {
-                case 'google':
-                    $adduser->google_id = $request->socailite_id;
-                    break;
-                case 'facebook':
-                    $adduser->facebook_id = $request->socailite_id;
-                    break;
-                case 'apple':
-                    $adduser->apple_id = $request->socailite_id;
-                    break;
-            }
-            $adduser->first_name = $firstName;
-            $adduser->last_name = $lastName; 
-            $adduser->email = $request->email;
-            $adduser->password = Hash::make(Str::before($request->email, '@'));
-            $adduser->status = "1";
-            $adduser->current_steps = 'step_2';
-            $adduser->save();
-    
-            // DB::table('device_tokens')->updateOrInsert(
-            //     ['user_id' => $adduser->id, 'device_token' => $request->fcm_token]
-            // );
-
-            $tokenData = $adduser->createToken($request->email);
-            $token = $tokenData->plainTextToken;
-            $tokenId = $tokenData->accessToken->id;
-
-            DB::table('device_tokens')->updateOrInsert(
-                ['user_id' => $adduser->id, 'device_token' => $request->fcm_token, 'token_id' => $tokenId]
-            );
-    
-            return response()->json(['status' => 'success', 'message' => 'Sign up with Socialite Successfully', 'token' => $token, 'userdata' => $adduser]);
+            $query->where('email', $request->email);
         }
+    
+        $user = $query->first();
+        // dd($user);
+        if ($user != null) {
+            // Handle soft-deleted users
+            if ($user->trashed()) {
+                if ($user->delete_by === 'admin') {
+                    return response()->json(['status' => 'failed', 'message' => 'Your account has been deactivated by an administrator. Please contact support for assistance.', 'token' => null, 'userdata' => null ]);
+                } else {
+                    // Reactivate the soft-deleted user
+                    $user->restore();
+                    $user->status = 1;
+                    $user->delete_by = null;
+                    $user->save();
+                }
+            }
+    
+            if ($user->status != 1) {
+                return response()->json(['status' => 'failed', 'message' => 'User account is inactive', 'token' => null, 'userdata' => null ]);
+            }
+    
+            $socialiteColumn = $socialiteType . '_id';
+    
+            if ($user->$socialiteColumn === $socialiteId) {
+                return $this->generateTokenResponse($user, "Sign in with {$socialiteType} successful", $request->fcm_token);
+            }
+    
+            // Update socialite ID if it wasn't matched
+            $user->$socialiteColumn = $socialiteId;
+            $user->save();
+    
+            return $this->generateTokenResponse($user, 'Socialite ID updated and signed in successfully.', $request->fcm_token);
+        }
+    
+        // No user found, create new
+        $nameParts = explode(' ', $request->first_name);
+        $firstName = array_shift($nameParts);
+        $lastName = implode(' ', $nameParts);
+    
+        $newUser = new User();
+        $newUser->first_name = $firstName;
+        $newUser->last_name = $lastName;
+        $newUser->email = $request->email;
+        $newUser->status = 1;
+        $newUser->password = Hash::make(Str::before($request->email, '@'));
+        $newUser->current_steps = 'step_2';
+        $newUser->{$socialiteType . '_id'} = $socialiteId;
+        $newUser->save();
+    
+        // Generate the token using a valid string (e.g., user's email or a custom string)
+        return $this->generateTokenResponse($newUser, 'Signed up with Socialite successfully', $request->fcm_token);
+    }
+    
+
+    protected function generateTokenResponse($user, $message, $fcmToken)
+    {
+        // Generate token
+        // if($socialiteType == 'apple'){
+        //     // Use a fallback string if email is null
+        //     $tokenName = $user->email ?? ('user_' . $user->id);
+
+            // Generate token
+            // $tokenData = $user->createToken($tokenName);
+        // }else{
+
+            $tokenData = $user->createToken($user->email); // Use the email as the name
+        // }
+        $token = $tokenData->plainTextToken;
+        $tokenId = $tokenData->accessToken->id;
+    
+        // Store device token (if needed)
+        DB::table('device_tokens')->updateOrInsert(
+            ['user_id' => $user->id, 'device_token' => $fcmToken, 'token_id' => $tokenId]
+        );
+    
+        $user->image = !empty($user->image) ? asset('admin-assets/assets/img/profile_img/user/' . $user->image) : asset('admin-assets/assets/img/profile_img/user/common.png');
+        return response()->json(['status' => 'success', 'message' => $message, 'token' => $token, 'userdata' => $user]);
+    }
+    
+
+    private function formatUserProfile($user)
+    {
+        $profile = User::select('id', 'first_name','last_name', 'email', 'country', 'country_code', 'phone', 'image', 'current_steps')->where('id', $user->id)->first();
+
+        $profile->image = !empty($profile->image) ? asset('admin-assets/assets/img/profile_img/user/' . $profile->image) : asset('admin-assets/assets/img/profile_img/user/common.png');
+
+        return $profile;
     }
     
 }

@@ -28,13 +28,18 @@
                         <div class="table-header-contant-text">
                             <h6>All Wholesaler</h6>
                             <div class="th_search">
+                                <div class="select_sort">
+                                    <select name="user_filter" >
+                                        <option value="">Select user</option>
+                                        <option value="all">All Users</option>
+                                        <option value="active">Active Users</option>
+                                        <option value="trashed">Trashed Users</option>
+                                    </select>
+                                </div>
                                <form id="searchForm" action="{{ route('user.index') }}" method="GET"
                                     class="d-flex">
-                                    <input type="text" placeholder="Search" name="keyword"
-                                        id="keyword"class="table-header-search-btn">
-                                    <button type="submit"><i class="fas fa-search"
-                                            style="margin-left:-60px !important; color:#FF8300;"></i>
-                                    </button>
+                                    <input type="text" placeholder="Search" name="keyword" id="keyword"class="table-header-search-btn">
+                                    <button type="submit"><i class="fas fa-search" style="margin-left:-60px !important; color:#FF8300;"></i></button>
                                 </form>
                             </div>
                         </div>
@@ -45,9 +50,10 @@
                                     <tr class="tr_dashboard" style="border-bottom:1px solid #FF8300 !important; border-top:1px solid #FF8300 !important;">
                                         <th class="pro_duct_th" style="width:8%;">ID</th>
                                         <th style="width:30%;">Full Name</th>
-                                        <th style="width:30%;">Email</th>
+                                        <th style="width:25%;">Email</th>
                                         <th style="width:13%;">Mobile</th>
                                         <th style="width:10%;">Status</th>
+                                        <th style="width:5%;">Deleted By</th>
                                         <th style="width:10%;">Action</th>
                                     </tr>
                                 </thead>
@@ -79,14 +85,30 @@
                                                         <span class="badge bg-danger">Inactive</span>
                                                     @endif
                                                 </td>
+                                                <td>{{ $user->delete_by }}</td>
                                                 <td>
                                                     <div class="d-flex">
                                                         <a href="{{ route('user.edit', $user->id) }}" type="button" class="text-info"><i class="fa fa-pencil" style="font-size:18px; gap:3px;"></i></a>
-                                                        <form method="post" action="{{ route('user.destroy', $user->id) }}">
-                                                            @method('DELETE')
-                                                            @csrf
-                                                            <a href="{{ route('user.destroy', $user->id) }}" style="padding:0 6px 0 6px;" class="delete_user text-danger admin_delete_user show_confirm"><i class="fa fa-trash" style="font-size:18px; gap:3px;"></i></a>
-                                                        </form>
+                                                        
+                                                        @if ($user->deleted_at)
+                                                            <!-- Restore Button -->
+                                                            <form method="POST" action="{{ route('user.restore', $user->id) }}">
+                                                                @csrf
+                                                                @method('PATCH')
+                                                                <button type="submit" class="btn btn-link text-success" style="padding:0 6px;">
+                                                                    <i class="fa fa-undo" style="font-size:18px;"></i>
+                                                                </button>
+                                                            </form>
+                                                        @else
+                                                            <!-- Delete Button -->
+                                                            <form method="POST" action="{{ route('user.destroy', $user->id) }}">
+                                                                @csrf
+                                                                @method('DELETE')
+                                                                <a href="{{ route('user.destroy', $user->id) }}" class="delete_user text-danger admin_delete_user show_confirm" style="padding:0 6px;">
+                                                                    <i class="fa fa-trash" style="font-size:18px;"></i>
+                                                                </a>
+                                                            </form>
+                                                        @endif
                                                         <a href="#" data-toggle="modal" class="view-user" data-target="#modal-default" data-id="{{ $user->id }}"><i class="fa-regular fa-eye" style="font-size:18px; color:#000;"></i></a>
                                                     </div>
                                                 </td>
@@ -138,10 +160,9 @@
                     success: function(response) {
                         $('#userTableBody').empty();
                         $.each(response.data, function(index, user) {
-                            var editUrl = `{{ route('user.edit', ':id') }}`.replace(
-                                ':id', user.id);
-                            var deleteUrl = `{{ route('user.destroy', ':id') }}`
-                                .replace(':id', user.id);
+                            var editUrl = `{{ route('user.edit', ':id') }}`.replace(':id', user.id);
+                            var deleteUrl = `{{ route('user.destroy', ':id') }}`.replace(':id', user.id);
+                            var restoreUrl = `{{ route('user.restore', ':id') }}`.replace(':id', user.id);
 
                             $('#userTableBody').append(
                                 `<tr>
@@ -157,16 +178,27 @@
                         <td>${user.email ? user.email : ''}</td>
                         <td>${user.country_code != null ? user.country_code : ''} ${user.phone != null ? user.phone : ''}</td>
                         <td>${user.status == 1 ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-danger">Inactive</span>'}</td>
+                        <td>${user.deleted_by ? user.deleted_by : ''}</td>
                         <td>
                             <div class="d-flex">
                                 <a href="${editUrl}" class="text-info"><i class="fa fa-pencil" style="font-size:18px; gap:3px;"></i></a>
-                                <form method="post" action="${deleteUrl}">
-                                    @method('DELETE')
-                                    @csrf
-                                    <a href="#" class="delete_user text-danger admin_delete_user show_confirm" style="padding:0 6px 0 6px">
-                                        <i class="fa fa-trash" style="font-size:18px; gap:3px;"></i>
-                                    </a>
-                                </form>
+                                ${
+                                    user.deleted_at
+                                        ? `<form method="POST" action="${restoreUrl}" style="margin:0 6px;">
+                                                <input type="hidden" name="_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="_method" value="PATCH">
+                                                <button type="submit" class="btn btn-link text-success p-0">
+                                                    <i class="fa fa-undo" style="font-size:18px;"></i>
+                                                </button>
+                                            </form>`
+                                        : `<form method="POST" action="${deleteUrl}" style="margin:0 6px;">
+                                                <input type="hidden" name="_token" value="{{ csrf_token() }}">
+                                                <input type="hidden" name="_method" value="DELETE">
+                                                <a href="#" class="delete_user text-danger admin_delete_user show_confirm">
+                                                    <i class="fa fa-trash" style="font-size:18px;"></i>
+                                                </a>
+                                            </form>`
+                                }
                                 <a href="#" class="view-user" data-toggle="modal" data-target="#modal-default" data-id="${user.id}">
                                     <i class="fa-regular fa-eye" style="font-size:18px; color:#000;"></i>
                                 </a>
@@ -186,11 +218,17 @@
                 loadUsers({ keyword: keyword });
             });
 
+            $('select[name="user_filter"]').on('change', function() {
+                var filter = $('select[name="user_filter"]').val();
+                loadUsers({ filter: filter });
+            });
+
             $(document).on('click', '#paginationLinks a', function(e) {
                 e.preventDefault();
                 var page = $(this).attr('href').split('page=')[1];
                 var keyword = $('#keyword').val();
-                loadUsers({ page: page, keyword: keyword });
+                var filter = $('select[name="user_filter"]').val();
+                loadUsers({ page: page, keyword: keyword, filter: filter });
             });
 
             $(document).on('click', '.view-user', function(e) {

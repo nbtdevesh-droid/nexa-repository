@@ -234,6 +234,9 @@ class HomeApiController extends Controller
             if($user){
                 $wishlistProductIds = $user->wishlist ? $user->wishlist->pluck('product_id')->toArray() : [];
                 $this->processProducts($products, $wishlistProductIds);
+            }else{
+                $wishlistProductIds = '';
+                $this->processProducts($products, $wishlistProductIds);
             }
 
             return Response::json(['status' => 'success', 'home_banner' => $banners, 'home_icon' => $home_icon, 'categories' => $categories, 'flash_deal_time' => $flash_deal_time, 'flash_deals' => $flash_deals, 'products' => $products]);
@@ -423,7 +426,7 @@ class HomeApiController extends Controller
             if($user){
                 $product->in_wishlist = in_array($product->id, $wishlistProductIds);
             }
-    
+            
             $regular_price = (float)($product->regular_price ?? 0);
             $sale_price = (float)($product->sale_price ?? 0);
     
@@ -473,6 +476,8 @@ class HomeApiController extends Controller
             // }
             if($user){
                 $this->processProducts($products, $wishlistProductIds);
+            }else{
+                $this->processProducts($products, '');
             }
                 
 
@@ -586,6 +591,9 @@ class HomeApiController extends Controller
         $user = auth('sanctum')->user();
         if($user){
             $wishlistProductIds = $user->wishlist ? $user->wishlist->pluck('product_id')->toArray() : [];
+            $this->processProducts($products, $wishlistProductIds);
+        }else{
+            $wishlistProductIds = '';
             $this->processProducts($products, $wishlistProductIds);
         }
 
@@ -1014,7 +1022,10 @@ class HomeApiController extends Controller
     {
         foreach ($products as $product) {
             $product->feature_image = $this->getImageUrl('product/feature_img', $product->feature_image);
-            $product->in_wishlist = in_array($product->id, $wishlistProductIds);
+            if($wishlistProductIds){
+
+                $product->in_wishlist = in_array($product->id, $wishlistProductIds);
+            }
             $product->min_order = $product->min_order;
 
             // Calculate discount percentage

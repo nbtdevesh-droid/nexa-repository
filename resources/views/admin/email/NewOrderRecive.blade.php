@@ -103,8 +103,8 @@
                                 </td>
                                 <td style="padding: 8px;">{{ $product['product_name'] }}</td>
                                 <td style="padding: 8px;">{{ $product['purchase_quantity'] }}</td>
-                                <td style="padding: 8px;">${{ $product['purchase_price'] }}</td>
-                                <td style="padding: 8px;">${{ $product['purchase_price'] * $product['purchase_quantity'] }}</td>
+                                <td style="padding: 8px;">₦{{ $product['purchase_price'] }}</td>
+                                <td style="padding: 8px;">₦{{ $product['purchase_price'] * $product['purchase_quantity'] }}</td>
                             </tr>
                             @php
                                 $subTotal += $product['regular_price'] * $product['purchase_quantity'];
@@ -118,19 +118,19 @@
                     <tfoot>
                        <tr>
                             <td colspan="4" style="padding: 8px; text-align: right;"><strong>Sub Total</strong></td>
-                            <td style="padding: 8px; text-align: right;"><strong>${{ number_format($subTotal, 2) }}</strong></td>
+                            <td style="padding: 8px; text-align: right;"><strong>₦{{ number_format($subTotal, 2) }}</strong></td>
                         </tr>
                         <tr>
                             <td colspan="4" style="padding: 8px; text-align: right;"><strong>Total Save</strong></td>
-                            <td style="padding: 8px; text-align: right;"><strong>${{ number_format($saveTotal, 2) }}</strong></td>
+                            <td style="padding: 8px; text-align: right;"><strong>₦{{ number_format($saveTotal, 2) }}</strong></td>
                         </tr>
                         <tr>
                             <td colspan="4" style="padding: 8px; text-align: right;"><strong>Discount</strong></td>
-                            <td style="padding: 8px; text-align: right;"><strong>${{ number_format($order->coupon_discount, 2) }}</strong></td>
+                            <td style="padding: 8px; text-align: right;"><strong>₦{{ number_format($order->coupon_discount, 2) }}</strong></td>
                         </tr>
                         <tr>
                             <td colspan="4" style="padding: 8px; text-align: right;"><strong>Total Pay</strong></td>
-                            <td style="padding: 8px; text-align: right;"><strong>${{ number_format($order->net_amount, 2) }}</strong></td>
+                            <td style="padding: 8px; text-align: right;"><strong>₦{{ number_format($order->net_amount, 2) }}</strong></td>
                         </tr>
 
                     </tfoot>

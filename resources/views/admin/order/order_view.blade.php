@@ -96,6 +96,8 @@
                                 'processing',
                                 'dispatch',
                                 'delivered',
+                                'cancelled',
+                                'refund',
                                 ];
                                 //$status_order = ['pending', 'confirm', 'dispatch'];
                                 $current_status_index = array_search($orders->order_status, $status_order);
@@ -185,10 +187,10 @@
                                                 Delivered
                                                 @elseif($orders->order_status == 'complete')
                                                 Completed
-                                                {{-- @elseif($orders->order_status == 'cancelled')
+                                                @elseif($orders->order_status == 'cancelled')
                                                 Cancelled
                                                 @elseif($orders->order_status == 'refund')
-                                                Refund --}}
+                                                Refund
                                                 @endif
                                             </p>
                                             <p><b>Delivery Option:</b> {{ $orders->delivery_option }}</p>
@@ -353,7 +355,7 @@
                             <td></td>
                             <td></td>
                             <td>
-                                <p style="color: #FF8300; font-weight: 600;">${{ number_format($subTotal, 2) }}
+                                <p style="color: #FF8300; font-weight: 600;">₦{{ number_format($subTotal, 2) }}
                                 </p>
                                 <p>₦{{ number_format($saveTotal, 2) }}</p>
                                 <p>₦{{ number_format($subTotal - $saveTotal, 2) }}</p>

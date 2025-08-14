@@ -42,6 +42,8 @@ Route::middleware('throttle:api')->group(function () {
         Route::post('all-products', 'AllProducts');
         Route::post('single-product', 'SingleProduct');
         Route::get('all-brands', 'AllBrands');
+        Route::post('keyword-suggestion', 'getSuggestions');
+        Route::post('flash-deals', 'flash_deal');
     });
 });
 
@@ -55,8 +57,6 @@ Route::middleware('apiAuth:sanctum')->group(function () {
         Route::post('product-review-update', 'product_review_update');
         Route::post('product-review-helpful', 'product_review_helpful');
         Route::post('product-all-reviews', 'product_all_reviews');
-        Route::post('keyword-suggestion', 'getSuggestions');
-        Route::post('flash-deals', 'flash_deal');
         Route::get('new-arival', 'new_arival');
         Route::get('all-vouchers', 'vouchers');
     });
@@ -106,7 +106,8 @@ Route::middleware('apiAuth:sanctum')->group(function () {
         Route::post('change-password', 'account_change_password');
         Route::post('notification-setting', 'notification_setting');
         Route::post('get-product-view-count', 'getProductViewCount');
-        
+        Route::delete('customer-delete', 'customer_delete');
+
         // Route::post('add-customer-bank-details', 'add_bank_details');
         // Route::get('get-customer-bank-details', 'get_bank_details');
     });

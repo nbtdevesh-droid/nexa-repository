@@ -74,7 +74,7 @@
                 <li><strong>Order ID:</strong> {{ $order->order_id }}</li>
                 <li><strong>Customer Name:</strong> {{ $user }}</li>
                 <li><strong>Order Status:</strong> Refunded</li>
-                <li><strong>Refund Amount:</strong> ${{ $order->net_amount ?? 'Amount not specified' }}</li>
+                <li><strong>Refund Amount:</strong> ₦{{ $order->net_amount ?? 'Amount not specified' }}</li>
             </ul>
 
             <div class="inventory-info">

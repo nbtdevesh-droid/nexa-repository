@@ -4,11 +4,13 @@ namespace App\Http\Controllers\api;
 use App\Http\Controllers\Controller;
 use App\Models\BankDetails;
 use App\Models\Product;
+use App\Models\User;
 use App\Models\ProductClickCount;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AccountSettingApiController extends Controller
 {
@@ -73,4 +75,37 @@ class AccountSettingApiController extends Controller
 
         return response()->json(['status' => 'success', 'app_setting' => $settings]);
     }
+
+    public function customer_delete(Request $request)
+    {
+        $auth = auth('sanctum')->user();
+
+        // Delete associated device token(s)
+        DB::table('device_tokens')->where('user_id', $auth->id)->delete();
+        
+        // Get the token from the request (if any)
+        $tokenString = $request->bearerToken();
+        
+        // Attempt to find and delete the personal access token
+        if ($tokenString) {
+            // Attempt to find and delete the personal access token
+            // Find all tokens associated with the user based on tokenable_id
+            $tokens = PersonalAccessToken::where('tokenable_id', $auth->id)->get(); // Get all tokens for the user
+    
+            // Loop through and delete all tokens
+            foreach ($tokens as $token) {
+                $token->delete();
+            }
+        }
+
+        // Retrieve user and perform the soft delete process
+        $user = User::findOrFail($auth->id);
+        $user->delete_by = 'User';  // Mark as user deletion (you may want to customize this if needed)
+        $user->save();
+        $user->delete();  // Soft delete the user
+        
+        // Return the success response
+        return response()->json(['status' => 'success', 'message' => 'Account deleted successfully.']);
+    }
+
 }
